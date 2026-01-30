@@ -355,8 +355,8 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <!-- 截圖：html2canvas -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <!-- ✅ PDF：jsPDF（修正：檔名需全小寫 jspdf.umd.min.js） -->
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
+  <!-- ✅ jsPDF 不在這裡直接引入：改為「主程式內動態備援載入」 -->
 </head>
 
 <body>
@@ -461,6 +461,42 @@
   </main>
 
   <script>
+    /**************************************************
+     * ✅ jsPDF 備援載入器（解決 CDN 被擋 / 載入失敗）
+     **************************************************/
+    function loadScript(src){
+      return new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = () => reject(new Error("載入失敗：" + src));
+        document.head.appendChild(s);
+      });
+    }
+
+    async function ensureJsPDF(){
+      if (window.jspdf && window.jspdf.jsPDF) return true;
+
+      const candidates = [
+        "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
+        "https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js",
+        "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"
+      ];
+
+      for (const url of candidates){
+        try{
+          await loadScript(url);
+          if (window.jspdf && window.jspdf.jsPDF) return true;
+        }catch(e){
+          // try next
+        }
+      }
+      return false;
+    }
+
+    /**************************************************
+     * people = [{ name: "姓名", title: "職級", manager: "上一代主管姓名(可空)" }]
+     **************************************************/
     let people = [];
 
     // DOM
@@ -1068,12 +1104,19 @@
       }
     });
 
-    // ✅ PDF export（加入 jsPDF 載入檢查，避免 window.jspdf undefined）
+    // ✅ PDF export（先確保 jsPDF 載入）
     btnPdf.addEventListener("click", async () => {
       clearMsg();
 
-      if (!window.jspdf || !window.jspdf.jsPDF) {
-        showWarn("PDF 產生失敗：jsPDF 套件未載入成功。\n請確認你有網路，或 jsPDF 的 script 路徑正確。");
+      const ok = await ensureJsPDF();
+      if(!ok){
+        showWarn(
+          "PDF 產生失敗：jsPDF 套件仍無法載入。\n" +
+          "可能原因：公司網路擋 CDN / 目前離線 / 瀏覽器政策限制。\n\n" +
+          "建議解法：\n" +
+          "1) 改用 VS Code 的 Live Server（http://）開啟，不要用 file:///。\n" +
+          "2) 或換一個網路環境再試。"
+        );
         return;
       }
 
@@ -1097,17 +1140,14 @@
 
         const pdf = new jsPDF({ orientation: "l", unit: "mm", format: "a4" });
 
-        const pageW = 297;
-        const pageH = 210;
-
+        const pageW = 297, pageH = 210;
         const margin = 8;
         const maxW = pageW - margin * 2;
         const maxH = pageH - margin * 2;
 
-        const imgW = canvas.width;
-        const imgH = canvas.height;
-
+        const imgW = canvas.width, imgH = canvas.height;
         const scale = Math.min(maxW / imgW, maxH / imgH);
+
         const drawW = imgW * scale;
         const drawH = imgH * scale;
 
