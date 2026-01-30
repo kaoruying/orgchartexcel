@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>業務組織圖工具（由上而下｜Excel 匯入｜橫式 PDF）</title>
+  <title>業務組織圖工具（由上而下｜Excel 匯入｜橫式 PDF｜直角連線）</title>
 
   <!-- 繁體中文顯示 -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -355,15 +355,14 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <!-- 截圖：html2canvas -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-
-  <!-- ✅ jsPDF 不在這裡直接引入：改為「主程式內動態備援載入」 -->
+  <!-- ✅ jsPDF：主程式內動態備援載入 -->
 </head>
 
 <body>
   <header>
     <div class="title">
       <h1>業務組織圖工具（由上而下）</h1>
-      <span class="tag">單檔 HTML｜Excel 匯入｜橫式 PDF 單頁下載</span>
+      <span class="tag">單檔 HTML｜Excel 匯入｜橫式 PDF 單頁下載｜直角連線</span>
     </div>
     <p class="subtitle">
       手動輸入「姓名、職稱、上一代主管姓名」建立組織，也可上傳 Excel（欄位：上一代主管、姓名、職級）自動匯入並生成組織圖。
@@ -624,7 +623,6 @@
         errors.push("找不到最上層（所有人都有上一代主管，或上一代主管不存在）。");
       }
 
-      // stable sort children
       for(const node of map.values()){
         node.children.sort((a,b) => a.name.localeCompare(b.name, "zh-Hant"));
       }
@@ -780,7 +778,6 @@
         }
       }
 
-      // 多 root：包假根
       const fakeRoot = { name:"__ROOT__", title:"", manager:"", children: roots };
       const wrapped = wrap(fakeRoot);
 
@@ -801,8 +798,11 @@
       }
       collect(wrapped);
 
-      const UNIT_W = NODE_W + H_GAP;
-      const UNIT_H = V_GAP;
+      const UNIT_W = 220 + 60; // NODE_W + H_GAP
+      const UNIT_H = 110;      // V_GAP
+      const NODE_W = 220;
+      const NODE_H = 74;
+      const PADDING = 30;
 
       function fill(v){
         if(v.node.name !== "__ROOT__"){
@@ -916,7 +916,6 @@
       stage.style.width = layout.stageW + "px";
       stage.style.height = layout.stageH + "px";
 
-      // nodes（只顯示姓名 + 職級）
       for(const [name, p] of layout.positions){
         const n = p.node;
         const el = document.createElement("div");
@@ -934,6 +933,7 @@
       drawLinesAbsolute(layout);
     }
 
+    // ✅直角連線（折點靠「中間一點」，但留一點上下緩衝更好看）
     function drawLinesAbsolute(layout){
       svgLines.innerHTML = "";
       svgLines.setAttribute("width", layout.stageW);
@@ -956,13 +956,22 @@
         const bx = childPos.x;
         const by = childPos.y;
 
-        const midY = (ay + by) / 2;
+        const gap = Math.max(0, by - ay);
+
+        // 折點：偏中間（55%），並且至少離父節點底部 18px、離子節點頂部 18px
+        let midY = ay + gap * 0.55;
+        midY = Math.max(midY, ay + 18);
+        midY = Math.min(midY, by - 18);
+
+        midY = Math.round(midY);
 
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        path.setAttribute("d", `M ${ax} ${ay} C ${ax} ${midY}, ${bx} ${midY}, ${bx} ${by}`);
+        path.setAttribute("d", `M ${ax} ${ay} V ${midY} H ${bx} V ${by}`);
         path.setAttribute("fill", "none");
         path.setAttribute("stroke", "#cbd5e1");
         path.setAttribute("stroke-width", "2");
+        path.setAttribute("stroke-linecap", "round");
+        path.setAttribute("stroke-linejoin", "round");
         svgLines.appendChild(path);
       }
     }
