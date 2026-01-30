@@ -1,0 +1,1062 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>業務組織圖工具（由上而下｜Excel 匯入｜PDF 下載）</title>
+
+  <!-- 繁體中文字體（可顯示中文） -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg:#f6f7fb;
+      --card:#ffffff;
+      --text:#111827;
+      --muted:#6b7280;
+      --border:#e5e7eb;
+      --shadow: 0 10px 25px rgba(17,24,39,.08);
+      --radius:16px;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family: "Noto Sans TC", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+      color:var(--text);
+      background:linear-gradient(180deg, #fafbff, var(--bg));
+    }
+    header{
+      padding:18px 16px 0;
+      max-width:1300px;
+      margin:0 auto;
+    }
+    .title{
+      display:flex;
+      align-items:flex-end;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    h1{ font-size:22px; margin:0; letter-spacing:.5px; }
+    .tag{
+      display:inline-block;
+      font-size:11px;
+      color:var(--muted);
+      border:1px solid var(--border);
+      padding:3px 8px;
+      border-radius:999px;
+      transform: translateY(-1px);
+    }
+    .subtitle{
+      font-size:13px;
+      color:var(--muted);
+      margin:6px 0 0;
+      line-height:1.6;
+    }
+
+    .wrap{
+      max-width:1300px;
+      margin:14px auto 28px;
+      padding:0 16px;
+      display:grid;
+      grid-template-columns: 440px 1fr;
+      gap:14px;
+    }
+    @media (max-width: 980px){
+      .wrap{ grid-template-columns: 1fr; }
+    }
+
+    .panel{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .panel .hd{
+      padding:14px 14px 10px;
+      border-bottom:1px solid var(--border);
+    }
+    .panel .hd .k{
+      font-weight:800;
+      font-size:14px;
+      margin:0;
+    }
+    .panel .hd .d{
+      margin:6px 0 0;
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.55;
+    }
+    .panel .bd{ padding:14px; }
+
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+    }
+    .grid .full{ grid-column:1 / -1; }
+
+    label{
+      display:block;
+      font-size:12px;
+      color:var(--muted);
+      margin:0 0 6px;
+    }
+    input, textarea{
+      width:100%;
+      padding:10px 11px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      outline:none;
+      font-size:14px;
+      background:#fff;
+      font-family: "Noto Sans TC", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+    }
+    input:focus, textarea:focus{
+      border-color:#94a3b8;
+      box-shadow:0 0 0 4px rgba(148,163,184,.25);
+    }
+    textarea{
+      min-height:120px;
+      resize:vertical;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size:12px;
+    }
+
+    .btns{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:12px;
+    }
+    button{
+      border:1px solid var(--border);
+      background:#fff;
+      padding:10px 12px;
+      border-radius:12px;
+      cursor:pointer;
+      font-weight:700;
+      font-size:14px;
+      font-family: "Noto Sans TC", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+    }
+    button.primary{
+      border-color:#111827;
+      background:#111827;
+      color:#fff;
+    }
+    button.danger{
+      border-color:#ef4444;
+      color:#ef4444;
+      background:#fff;
+    }
+    button:active{ transform: translateY(1px); }
+
+    .row{
+      display:grid;
+      grid-template-columns: 1fr auto;
+      gap:10px;
+      align-items:center;
+      padding:10px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      margin-top:10px;
+      background:#fff;
+    }
+    .row .meta{
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+      min-width:0;
+    }
+    .row .meta .name{
+      font-weight:800;
+      font-size:14px;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .row .meta .sub{
+      font-size:12px;
+      color:var(--muted);
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .mini{ display:flex; gap:8px; }
+    .mini button{ padding:8px 10px; font-size:13px; }
+
+    .hint{
+      margin-top:12px;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.6;
+      border-top:1px dashed var(--border);
+      padding-top:12px;
+    }
+    .warn{
+      margin-top:10px;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid #fecaca;
+      background:#fff1f2;
+      color:#9f1239;
+      font-size:13px;
+      line-height:1.55;
+      display:none;
+      white-space:pre-line;
+    }
+    .ok{
+      margin-top:10px;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid #bbf7d0;
+      background:#f0fdf4;
+      color:#166534;
+      font-size:13px;
+      line-height:1.55;
+      display:none;
+      white-space:pre-line;
+    }
+
+    details{
+      border-top:1px dashed var(--border);
+      margin-top:12px;
+      padding-top:12px;
+    }
+    summary{
+      cursor:pointer;
+      font-weight:800;
+      font-size:13px;
+      color:#0f172a;
+      list-style:none;
+    }
+    summary::-webkit-details-marker{ display:none; }
+    .small-note{
+      font-size:12px;
+      color:var(--muted);
+      margin:8px 0 0;
+      line-height:1.55;
+    }
+    .filebox{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:10px;
+    }
+    input[type="file"]{
+      padding:10px;
+      background:#fff;
+    }
+    .pill{
+      display:inline-block;
+      font-size:12px;
+      color:#334155;
+      background:#f1f5f9;
+      padding:5px 10px;
+      border-radius:999px;
+      border:1px solid var(--border);
+    }
+
+    /* 圖區 */
+    .canvas{
+      position:relative;
+      height: calc(100vh - 140px);
+      min-height:600px;
+      background: radial-gradient(1200px 600px at 20% 0%, #ffffff 0%, #f6f7fb 60%);
+      border-radius:var(--radius);
+      border:1px solid var(--border);
+      box-shadow:var(--shadow);
+      overflow:auto;
+    }
+    @media (max-width: 980px){ .canvas{ height: 70vh; } }
+
+    /* PDF：只截「單頁組織圖」用（只放圖，不含右側背景） */
+    .pdf-area{
+      position:relative;
+      display:inline-block;
+      background:#fff;
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:18px 18px 22px;
+      margin:18px;
+      box-shadow: 0 8px 18px rgba(17,24,39,.06);
+    }
+    .pdf-title{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-end;
+      gap:12px;
+      padding:0 0 12px;
+      border-bottom:1px dashed var(--border);
+      margin-bottom:14px;
+    }
+    .pdf-title .left .t1{
+      font-weight:900; font-size:16px; margin:0;
+    }
+    .pdf-title .left .t2{
+      margin:6px 0 0;
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.55;
+    }
+    .pdf-title .right{
+      font-size:12px;
+      color:var(--muted);
+      white-space:nowrap;
+    }
+
+    /* 組織節點排版 */
+    .stage{
+      position:relative;
+      min-width: 980px; /* 圖比較寬，避免換行太醜 */
+      min-height: 520px;
+      padding:0;
+    }
+    svg.lines{
+      position:absolute;
+      top:0; left:0;
+      width:100%;
+      height:100%;
+      pointer-events:none;
+    }
+    .nodes{
+      position:relative;
+      display:flex;
+      flex-direction:column;
+      gap:22px;
+      align-items:center;
+    }
+    .level{
+      display:flex;
+      gap:18px;
+      flex-wrap:nowrap;
+      justify-content:center;
+      width:100%;
+    }
+    .node{
+      width:220px;
+      background:rgba(255,255,255,.95);
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:12px 12px 10px;
+      box-shadow: 0 8px 18px rgba(17,24,39,.06);
+      text-align:center;
+      position:relative;
+    }
+    .node .nm{
+      font-weight:900;
+      font-size:15px;
+      margin:0;
+    }
+    .node .tt{
+      font-size:12px;
+      color:var(--muted);
+      margin:6px 0 0;
+    }
+    .node .up{
+      margin:8px 0 0;
+      font-size:12px;
+      color:#334155;
+      background:#f1f5f9;
+      display:inline-block;
+      padding:4px 8px;
+      border-radius:999px;
+      max-width:100%;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+  </style>
+
+  <!-- Excel 解析：SheetJS -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- 截圖：html2canvas -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <!-- PDF：jsPDF -->
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+</head>
+
+<body>
+  <header>
+    <div class="title">
+      <h1>業務組織圖工具（由上而下）</h1>
+      <span class="tag">單檔 HTML｜Excel 匯入｜PDF 單頁下載</span>
+    </div>
+    <p class="subtitle">
+      你可以手動輸入「姓名、職稱、上線姓名」建立組織，也可以上傳 Excel（欄位：上一代主管、姓名、職級）自動匯入並生成組織圖。
+    </p>
+  </header>
+
+  <main class="wrap">
+    <!-- 左側：控制面板 -->
+    <section class="panel">
+      <div class="hd">
+        <p class="k">輸入 / 匯入資料</p>
+        <p class="d">上線姓名留空＝最上層。為避免判斷錯誤，建議姓名不要重複。</p>
+      </div>
+      <div class="bd">
+        <div class="grid">
+          <div>
+            <label>姓名</label>
+            <input id="inpName" placeholder="例如：王小明" />
+          </div>
+          <div>
+            <label>職稱</label>
+            <input id="inpTitle" placeholder="例如：業務襄理" />
+          </div>
+          <div class="full">
+            <label>上線姓名（留空＝最上層）</label>
+            <input id="inpManager" placeholder="例如：陳經理" />
+          </div>
+        </div>
+
+        <div class="btns">
+          <button class="primary" id="btnAdd">新增人員</button>
+          <button id="btnRender">更新組織圖</button>
+          <button id="btnPdf" class="primary">下載單頁組織圖 PDF</button>
+          <button class="danger" id="btnReset">清空全部</button>
+        </div>
+
+        <div id="msgWarn" class="warn"></div>
+        <div id="msgOk" class="ok"></div>
+
+        <details open>
+          <summary>Excel 上傳匯入（欄位：上一代主管、姓名、職級）</summary>
+          <p class="small-note">
+            Excel 第一列請放欄位名稱，必須包含：<b>上一代主管</b>、<b>姓名</b>、<b>職級</b>（欄名需完全相同）。
+            <br/>若「上一代主管」為空白，視為最上層。
+          </p>
+          <div class="filebox">
+            <input id="fileExcel" type="file" accept=".xlsx,.xls" />
+            <span class="pill" id="excelStatus">尚未選擇檔案</span>
+          </div>
+          <div class="btns">
+            <button id="btnImportExcel">匯入並產生組織圖</button>
+          </div>
+        </details>
+
+        <details>
+          <summary>進階：批次匯入 / 匯出（貼上資料陣列 JSON）</summary>
+          <p class="small-note">
+            格式：<code>[{"name":"姓名","title":"職稱","manager":"上線姓名"}...]</code>
+          </p>
+          <label style="margin-top:10px;">資料陣列（JSON）</label>
+          <textarea id="jsonArea"></textarea>
+          <div class="btns">
+            <button id="btnApplyJson">套用</button>
+            <button id="btnCopyJson">複製目前資料</button>
+            <button id="btnLoadDemo">載入示範資料</button>
+          </div>
+        </details>
+
+        <div id="peopleList"></div>
+
+        <p class="hint">
+          常見問題排除：<br/>
+          1) 若出現「上線不存在」，代表某人的上線姓名在資料中找不到。<br/>
+          2) 若出現「迴圈關係」，代表 A 的上線是 B、B 的上線又回到 A（或更長的循環）。<br/>
+          3) PDF 下載會只截「單頁組織圖區」並輸出為 A4 直式。
+        </p>
+      </div>
+    </section>
+
+    <!-- 右側：圖區（可捲動） -->
+    <section class="canvas" aria-label="組織圖區域">
+      <!-- PDF 專用區（單頁） -->
+      <div class="pdf-area" id="pdfArea">
+        <div class="pdf-title">
+          <div class="left">
+            <p class="t1">組織圖</p>
+            <p class="t2">由上而下（適用：組織說明 / 培育 / 晉升展示）</p>
+          </div>
+          <div class="right" id="pdfStamp"></div>
+        </div>
+
+        <div class="stage" id="stage">
+          <svg class="lines" id="svgLines"></svg>
+          <div class="nodes" id="nodes"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    /**************************************************
+     * 資料結構：
+     * people = [{ name: "姓名", title: "職稱", manager: "上線姓名(可空)" }]
+     **************************************************/
+    let people = [];
+
+    // ======= DOM =======
+    const inpName = document.getElementById("inpName");
+    const inpTitle = document.getElementById("inpTitle");
+    const inpManager = document.getElementById("inpManager");
+
+    const btnAdd = document.getElementById("btnAdd");
+    const btnRender = document.getElementById("btnRender");
+    const btnReset = document.getElementById("btnReset");
+    const btnPdf = document.getElementById("btnPdf");
+
+    const peopleList = document.getElementById("peopleList");
+    const nodesEl = document.getElementById("nodes");
+    const svgLines = document.getElementById("svgLines");
+
+    const msgWarn = document.getElementById("msgWarn");
+    const msgOk = document.getElementById("msgOk");
+
+    const jsonArea = document.getElementById("jsonArea");
+    const btnApplyJson = document.getElementById("btnApplyJson");
+    const btnCopyJson = document.getElementById("btnCopyJson");
+    const btnLoadDemo = document.getElementById("btnLoadDemo");
+
+    const fileExcel = document.getElementById("fileExcel");
+    const excelStatus = document.getElementById("excelStatus");
+    const btnImportExcel = document.getElementById("btnImportExcel");
+
+    const pdfArea = document.getElementById("pdfArea");
+    const pdfStamp = document.getElementById("pdfStamp");
+
+    // ======= 小工具 =======
+    function showWarn(text){
+      msgWarn.style.display = "block";
+      msgWarn.textContent = text || "";
+      msgOk.style.display = "none";
+      msgOk.textContent = "";
+    }
+    function showOk(text){
+      msgOk.style.display = "block";
+      msgOk.textContent = text || "";
+      msgWarn.style.display = "none";
+      msgWarn.textContent = "";
+    }
+    function clearMsg(){
+      msgWarn.style.display = "none";
+      msgWarn.textContent = "";
+      msgOk.style.display = "none";
+      msgOk.textContent = "";
+    }
+    function nowStamp(){
+      const d = new Date();
+      const pad = n => String(n).padStart(2,"0");
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    // ======= 驗證：姓名不可空 / 盡量不重複 =======
+    function normalize(s){ return (s ?? "").toString().trim(); }
+
+    function hasDuplicateNames(arr){
+      const set = new Set();
+      for(const p of arr){
+        const n = normalize(p.name);
+        if(!n) continue;
+        if(set.has(n)) return true;
+        set.add(n);
+      }
+      return false;
+    }
+
+    // ======= 建樹 + 檢查問題 =======
+    function buildTree(data){
+      const map = new Map(); // name -> node
+      const errors = [];
+
+      // 建節點
+      for(const p of data){
+        const name = normalize(p.name);
+        if(!name) { errors.push("有資料列的「姓名」是空白。"); continue; }
+        map.set(name, { ...p, name, title: normalize(p.title), manager: normalize(p.manager), children: [] });
+      }
+
+      // 連線
+      const roots = [];
+      for(const node of map.values()){
+        if(node.manager){
+          const parent = map.get(node.manager);
+          if(!parent){
+            errors.push(`「${node.name}」的上線「${node.manager}」不存在於資料中。`);
+          }else{
+            parent.children.push(node);
+          }
+        }else{
+          roots.push(node);
+        }
+      }
+
+      // 迴圈偵測：對每個節點往上追
+      const visiting = new Set();
+      const visited = new Set();
+
+      function dfsCycle(n){
+        if(visiting.has(n.name)) return true;
+        if(visited.has(n.name)) return false;
+        visiting.add(n.name);
+        const parentName = n.manager;
+        if(parentName && map.has(parentName)){
+          if(dfsCycle(map.get(parentName))) return true;
+        }
+        visiting.delete(n.name);
+        visited.add(n.name);
+        return false;
+      }
+      for(const n of map.values()){
+        if(dfsCycle(n)){
+          errors.push("資料中存在「迴圈關係」（某人的上線追溯回到自己或形成循環）。");
+          break;
+        }
+      }
+
+      // 根節點檢查：最好只有一個
+      if(roots.length === 0 && map.size > 0){
+        errors.push("找不到最上層（所有人都有上線，或上線不存在）。");
+      }
+      return { roots, map, errors };
+    }
+
+    // ======= 分層：由上而下 =======
+    function levelize(roots){
+      const levels = [];
+      let q = roots.map(r => ({ node:r, depth:0 }));
+      const seen = new Set();
+
+      while(q.length){
+        const { node, depth } = q.shift();
+        // 避免重複推入（在錯誤資料下）
+        const key = node.name + "@" + depth;
+        if(seen.has(key)) continue;
+        seen.add(key);
+
+        if(!levels[depth]) levels[depth] = [];
+        levels[depth].push(node);
+
+        for(const c of node.children){
+          q.push({ node:c, depth:depth+1 });
+        }
+      }
+      return levels;
+    }
+
+    // ======= Render：清單 =======
+    function renderList(){
+      peopleList.innerHTML = "";
+      if(people.length === 0){
+        const empty = document.createElement("div");
+        empty.className = "pill";
+        empty.textContent = "目前沒有資料（可手動新增或 Excel 匯入）";
+        peopleList.appendChild(empty);
+        return;
+      }
+
+      for(let i=0;i<people.length;i++){
+        const p = people[i];
+        const row = document.createElement("div");
+        row.className = "row";
+
+        const meta = document.createElement("div");
+        meta.className = "meta";
+
+        const name = document.createElement("div");
+        name.className = "name";
+        name.textContent = p.name;
+
+        const sub = document.createElement("div");
+        sub.className = "sub";
+        sub.textContent = `職稱：${p.title || "（未填）"} ｜ 上線：${p.manager || "（最上層）"}`;
+
+        meta.appendChild(name);
+        meta.appendChild(sub);
+
+        const mini = document.createElement("div");
+        mini.className = "mini";
+
+        const btnEdit = document.createElement("button");
+        btnEdit.textContent = "編輯";
+        btnEdit.onclick = () => {
+          inpName.value = p.name;
+          inpTitle.value = p.title || "";
+          inpManager.value = p.manager || "";
+          showOk("已帶入欄位，修改後按「新增人員」會以同名覆蓋更新。");
+        };
+
+        const btnDel = document.createElement("button");
+        btnDel.textContent = "刪除";
+        btnDel.onclick = () => {
+          people.splice(i,1);
+          clearMsg();
+          renderAll();
+        };
+
+        mini.appendChild(btnEdit);
+        mini.appendChild(btnDel);
+
+        row.appendChild(meta);
+        row.appendChild(mini);
+        peopleList.appendChild(row);
+      }
+    }
+
+    // ======= Render：組織圖（節點 + 連線） =======
+    function clearChart(){
+      nodesEl.innerHTML = "";
+      svgLines.innerHTML = "";
+    }
+
+    function renderChart(){
+      clearChart();
+
+      // 日期戳（PDF 標頭用）
+      pdfStamp.textContent = `匯出時間：${nowStamp()}`;
+
+      if(people.length === 0){
+        const lvl = document.createElement("div");
+        lvl.className = "level";
+        const node = document.createElement("div");
+        node.className = "node";
+        node.innerHTML = `<p class="nm">尚未輸入資料</p><p class="tt">請在左側新增人員或匯入 Excel</p>`;
+        lvl.appendChild(node);
+        nodesEl.appendChild(lvl);
+        return;
+      }
+
+      // 檢查重複姓名（用姓名做 key）
+      if(hasDuplicateNames(people)){
+        showWarn("偵測到「姓名重複」。建議避免重複姓名，否則上線比對可能錯誤。\n你仍可繼續產生，但結果可能不準。");
+      }
+
+      const { roots, errors } = buildTree(people);
+      if(errors.length){
+        showWarn(errors.join("\n"));
+      }else{
+        clearMsg();
+      }
+
+      // 即使有錯誤，也嘗試把能畫的部分畫出來
+      const levels = levelize(roots);
+
+      // 建節點 DOM（先全部放進去，稍後畫線）
+      const nodeDomMap = new Map(); // name -> element（同名只會留最後一個）
+      levels.forEach((nodes, depth) => {
+        const levelEl = document.createElement("div");
+        levelEl.className = "level";
+        levelEl.dataset.depth = depth;
+
+        for(const n of nodes){
+          const el = document.createElement("div");
+          el.className = "node";
+          el.dataset.name = n.name;
+
+          const upText = n.manager ? `上線：${n.manager}` : "最上層";
+          el.innerHTML = `
+            <p class="nm">${escapeHtml(n.name)}</p>
+            <p class="tt">${escapeHtml(n.title || "（未填職稱）")}</p>
+            <span class="up">${escapeHtml(upText)}</span>
+          `;
+          levelEl.appendChild(el);
+          nodeDomMap.set(n.name, el);
+        }
+
+        nodesEl.appendChild(levelEl);
+      });
+
+      // 畫線：用 DOM 位置計算（父->子）
+      requestAnimationFrame(() => drawLines(nodeDomMap));
+    }
+
+    function drawLines(nodeDomMap){
+      svgLines.innerHTML = "";
+
+      // 調整 SVG 尺寸（覆蓋 stage）
+      const stage = document.getElementById("stage");
+      const rect = stage.getBoundingClientRect();
+
+      svgLines.setAttribute("width", stage.scrollWidth);
+      svgLines.setAttribute("height", stage.scrollHeight);
+      svgLines.setAttribute("viewBox", `0 0 ${stage.scrollWidth} ${stage.scrollHeight}`);
+
+      // 把 clientRect 換成相對 stage 的座標
+      function centerTop(el){
+        const r = el.getBoundingClientRect();
+        const x = (r.left - rect.left) + (r.width/2) + stage.scrollLeft;
+        const y = (r.top - rect.top) + stage.scrollTop;
+        return {x,y};
+      }
+      function centerBottom(el){
+        const r = el.getBoundingClientRect();
+        const x = (r.left - rect.left) + (r.width/2) + stage.scrollLeft;
+        const y = (r.top - rect.top) + r.height + stage.scrollTop;
+        return {x,y};
+      }
+
+      // 依 people 資料畫線（可以包含未在 levels 的點：若 DOM 找不到就略過）
+      for(const p of people){
+        const child = nodeDomMap.get(normalize(p.name));
+        const parent = nodeDomMap.get(normalize(p.manager));
+        if(!child || !parent) continue;
+
+        const a = centerBottom(parent);
+        const b = centerTop(child);
+
+        const midY = (a.y + b.y) / 2;
+
+        // 曲線（更好看）
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        const d = `M ${a.x} ${a.y}
+                   C ${a.x} ${midY},
+                     ${b.x} ${midY},
+                     ${b.x} ${b.y}`;
+        path.setAttribute("d", d);
+        path.setAttribute("fill", "none");
+        path.setAttribute("stroke", "#cbd5e1");
+        path.setAttribute("stroke-width", "2");
+        svgLines.appendChild(path);
+      }
+    }
+
+    // ======= 事件：新增 / 更新 / 清空 =======
+    btnAdd.addEventListener("click", () => {
+      clearMsg();
+      const name = normalize(inpName.value);
+      const title = normalize(inpTitle.value);
+      const manager = normalize(inpManager.value);
+
+      if(!name){
+        showWarn("請先輸入「姓名」。");
+        return;
+      }
+
+      // 同名則視為更新（簡化業務操作）
+      const idx = people.findIndex(x => normalize(x.name) === name);
+      const item = { name, title, manager };
+
+      if(idx >= 0){
+        people[idx] = item;
+        showOk(`已更新：${name}`);
+      }else{
+        people.push(item);
+        showOk(`已新增：${name}`);
+      }
+
+      // 清空欄位
+      inpName.value = "";
+      inpTitle.value = "";
+      inpManager.value = "";
+
+      renderAll();
+    });
+
+    btnRender.addEventListener("click", () => {
+      clearMsg();
+      renderAll();
+    });
+
+    btnReset.addEventListener("click", () => {
+      people = [];
+      clearMsg();
+      renderAll();
+      showOk("已清空全部資料。");
+    });
+
+    // ======= JSON 匯入/匯出 =======
+    btnCopyJson.addEventListener("click", async () => {
+      try{
+        const text = JSON.stringify(people, null, 2);
+        jsonArea.value = text;
+        await navigator.clipboard.writeText(text);
+        showOk("已複製目前資料（JSON）到剪貼簿，並同步填入文本框。");
+      }catch(e){
+        jsonArea.value = JSON.stringify(people, null, 2);
+        showOk("已填入 JSON（你的瀏覽器可能不允許自動複製，請手動全選複製）。");
+      }
+    });
+
+    btnApplyJson.addEventListener("click", () => {
+      clearMsg();
+      try{
+        const arr = JSON.parse(jsonArea.value || "[]");
+        if(!Array.isArray(arr)) throw new Error("JSON 必須是一個陣列。");
+        // 基本清洗
+        people = arr.map(x => ({
+          name: normalize(x.name),
+          title: normalize(x.title),
+          manager: normalize(x.manager),
+        })).filter(x => x.name);
+
+        showOk(`已套用 JSON 匯入，共 ${people.length} 筆。`);
+        renderAll();
+      }catch(err){
+        showWarn("JSON 解析失敗：\n" + (err?.message || String(err)));
+      }
+    });
+
+    btnLoadDemo.addEventListener("click", () => {
+      clearMsg();
+      people = [
+        { name:"陳經理", title:"業務經理", manager:"" },
+        { name:"王襄理", title:"業務襄理", manager:"陳經理" },
+        { name:"林襄理", title:"業務襄理", manager:"陳經理" },
+        { name:"張主任", title:"主任", manager:"王襄理" },
+        { name:"李主任", title:"主任", manager:"王襄理" },
+        { name:"周主任", title:"主任", manager:"林襄理" },
+        { name:"黃業代", title:"業務代表", manager:"張主任" },
+        { name:"吳業代", title:"業務代表", manager:"李主任" },
+        { name:"趙業代", title:"業務代表", manager:"周主任" },
+      ];
+      showOk("已載入示範資料。");
+      renderAll();
+    });
+
+    // ======= Excel 匯入（欄位：上一代主管、姓名、職級） =======
+    fileExcel.addEventListener("change", () => {
+      const f = fileExcel.files?.[0];
+      excelStatus.textContent = f ? `已選擇：${f.name}` : "尚未選擇檔案";
+      clearMsg();
+    });
+
+    btnImportExcel.addEventListener("click", async () => {
+      clearMsg();
+      const f = fileExcel.files?.[0];
+      if(!f){
+        showWarn("請先選擇 Excel 檔案（.xlsx 或 .xls）。");
+        return;
+      }
+
+      try{
+        const buf = await f.arrayBuffer();
+        const wb = XLSX.read(buf, { type:"array" });
+        const sheetName = wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval:"" }); // 以第一列欄名為 key
+
+        // 欄名必須完全吻合
+        const needCols = ["上一代主管","姓名","職級"];
+        const missing = needCols.filter(c => !(c in (rows[0] || {})));
+        if(missing.length){
+          showWarn(
+            "Excel 欄位不符合，缺少：\n" + missing.join("、") +
+            "\n\n請確認第一列欄名必須是：上一代主管、姓名、職級（完全相同）。"
+          );
+          return;
+        }
+
+        const imported = rows
+          .map(r => ({
+            manager: normalize(r["上一代主管"]),
+            name: normalize(r["姓名"]),
+            title: normalize(r["職級"]),
+          }))
+          .filter(x => x.name); // 姓名空白略過
+
+        if(imported.length === 0){
+          showWarn("Excel 解析後沒有有效資料（可能姓名欄皆空白）。");
+          return;
+        }
+
+        // 直接覆蓋目前資料（比較直覺）
+        people = imported.map(x => ({ name:x.name, title:x.title, manager:x.manager }));
+        showOk(`Excel 匯入完成：共 ${people.length} 筆（使用工作表：${sheetName}）。`);
+        renderAll();
+      }catch(err){
+        showWarn("Excel 解析失敗：\n" + (err?.message || String(err)));
+      }
+    });
+
+    // ======= PDF 下載（單頁組織圖） =======
+    btnPdf.addEventListener("click", async () => {
+      clearMsg();
+      if(people.length === 0){
+        showWarn("目前沒有資料，無法下載 PDF。");
+        return;
+      }
+
+      try{
+        showOk("正在產生 PDF（請勿關閉頁面）…");
+
+        // 重要：截圖前確保線已畫完
+        await new Promise(r => setTimeout(r, 150));
+
+        const canvas = await html2canvas(pdfArea, {
+          backgroundColor: "#ffffff",
+          scale: 2, // 畫質更清楚
+          useCORS: true
+        });
+
+        const imgData = canvas.toDataURL("image/png");
+
+        // A4 直式：210 x 297 mm
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({ orientation:"p", unit:"mm", format:"a4" });
+
+        // 計算等比縮放塞進 A4
+        const pageW = 210;
+        const pageH = 297;
+
+        // canvas px -> 以寬為基準換算
+        const imgW = pageW;
+        const imgH = (canvas.height * imgW) / canvas.width;
+
+        let x = 0;
+        let y = 0;
+
+        // 若高度超出，縮到剛好一頁（你的需求是「單頁」）
+        if(imgH > pageH){
+          const scale = pageH / imgH;
+          const finalW = imgW * scale;
+          const finalH = imgH * scale;
+          x = (pageW - finalW) / 2;
+          y = (pageH - finalH) / 2;
+          pdf.addImage(imgData, "PNG", x, y, finalW, finalH);
+        }else{
+          // 不超出：上下置中
+          y = (pageH - imgH) / 2;
+          pdf.addImage(imgData, "PNG", 0, y, imgW, imgH);
+        }
+
+        pdf.save(`組織圖_${nowStamp().replace(/[: ]/g,"-")}.pdf`);
+        showOk("PDF 已下載完成。");
+      }catch(err){
+        showWarn("PDF 產生失敗：\n" + (err?.message || String(err)));
+      }
+    });
+
+    // ======= 重新渲染總控 =======
+    function renderAll(){
+      renderList();
+      renderChart();
+      // 同步 JSON 文本框（方便使用者一鍵複製）
+      jsonArea.value = JSON.stringify(people, null, 2);
+    }
+
+    // HTML escape（避免名字含特殊字元造成排版問題）
+    function escapeHtml(s){
+      return (s ?? "").toString()
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#039;");
+    }
+
+    // 視窗改變大小時，重畫線
+    window.addEventListener("resize", () => {
+      // 只要圖上有內容就重畫
+      if(nodesEl.children.length) renderChart();
+    });
+
+    // 初始：載入示範資料（你也可以改成空白）
+    people = [
+      { name:"陳經理", title:"業務經理", manager:"" },
+      { name:"王襄理", title:"業務襄理", manager:"陳經理" },
+      { name:"林襄理", title:"業務襄理", manager:"陳經理" },
+      { name:"張主任", title:"主任", manager:"王襄理" },
+      { name:"李主任", title:"主任", manager:"王襄理" },
+      { name:"周主任", title:"主任", manager:"林襄理" },
+      { name:"黃業代", title:"業務代表", manager:"張主任" },
+      { name:"吳業代", title:"業務代表", manager:"李主任" },
+      { name:"趙業代", title:"業務代表", manager:"周主任" },
+    ];
+    renderAll();
+  </script>
+</body>
+</html>
