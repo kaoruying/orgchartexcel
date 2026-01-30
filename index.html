@@ -308,7 +308,7 @@
       white-space:nowrap;
     }
 
-    /* 組織節點排版 */
+    /* ✅ 改成「座標定位」的樹狀版面 */
     .stage{
       position:relative;
       min-width: 980px;
@@ -323,18 +323,10 @@
       pointer-events:none;
     }
     .nodes{
-      position:relative;
-      display:flex;
-      flex-direction:column;
-      gap:22px;
-      align-items:center;
-    }
-    .level{
-      display:flex;
-      gap:18px;
-      flex-wrap:nowrap;
-      justify-content:center;
+      position:absolute;
+      top:0; left:0;
       width:100%;
+      height:100%;
     }
     .node{
       width:220px;
@@ -344,7 +336,8 @@
       padding:12px 12px 12px;
       box-shadow: 0 8px 18px rgba(17,24,39,.06);
       text-align:center;
-      position:relative;
+      position:absolute; /* ✅ absolute */
+      transform: translate(-50%, 0); /* ✅ 以中心點定位 X */
     }
     .node .nm{
       font-weight:900;
@@ -354,7 +347,7 @@
     .node .tt{
       font-size:12px;
       color:var(--muted);
-      margin:8px 0 0; /* 名字下方直接顯示職級 */
+      margin:8px 0 0;
     }
   </style>
 
@@ -468,9 +461,6 @@
   </main>
 
   <script>
-    /**************************************************
-     * people = [{ name: "姓名", title: "職稱/職級", manager: "上一代主管姓名(可空)" }]
-     **************************************************/
     let people = [];
 
     // DOM
@@ -501,8 +491,9 @@
 
     const pdfArea = document.getElementById("pdfArea");
     const pdfStamp = document.getElementById("pdfStamp");
+    const stage = document.getElementById("stage");
 
-    // helpers
+    // ===== helpers =====
     function showWarn(text){
       msgWarn.style.display = "block";
       msgWarn.textContent = text || "";
@@ -546,7 +537,7 @@
       return false;
     }
 
-    // build tree + validate
+    // ===== build tree + validate =====
     function buildTree(data){
       const map = new Map();
       const errors = [];
@@ -597,32 +588,77 @@
         errors.push("找不到最上層（所有人都有上一代主管，或上一代主管不存在）。");
       }
 
-      return { roots, errors };
+      return { roots, errors, map };
     }
 
-    // levelize (top-down)
-    function levelize(roots){
-      const levels = [];
-      const q = roots.map(r => ({ node:r, depth:0 }));
-      const seen = new Set();
+    // ===== ✅ layout: leaf x assign, parent x = avg(children) =====
+    function computeLayout(roots){
+      const NODE_W = 220;
+      const NODE_H = 74;     // 估算節點高度（名字+職級）
+      const H_GAP  = 60;
+      const V_GAP  = 90;
+      const PADDING = 30;
 
-      while(q.length){
-        const { node, depth } = q.shift();
-        const key = node.name + "@" + depth;
-        if(seen.has(key)) continue;
-        seen.add(key);
+      let leafIndex = 0;
 
-        if(!levels[depth]) levels[depth] = [];
-        levels[depth].push(node);
-
-        for(const c of node.children){
-          q.push({ node:c, depth:depth+1 });
-        }
+      // 先排序 children（可讓圖更穩定）
+      function sortTree(n){
+        n.children.sort((a,b) => a.name.localeCompare(b.name, "zh-Hant"));
+        n.children.forEach(sortTree);
       }
-      return levels;
+      roots.forEach(sortTree);
+
+      // dfs: assign x unit (leaf index)
+      function assignX(n){
+        if(!n.children || n.children.length === 0){
+          n.__xUnit = leafIndex++;
+          return n.__xUnit;
+        }
+        const xs = n.children.map(assignX);
+        n.__xUnit = xs.reduce((s,v)=>s+v,0) / xs.length; // ✅ 單子節點 = 同 X
+        return n.__xUnit;
+      }
+      roots.forEach(assignX);
+
+      // assign y by depth
+      function assignY(n, depth){
+        n.__depth = depth;
+        n.children.forEach(c => assignY(c, depth+1));
+      }
+      roots.forEach(r => assignY(r, 0));
+
+      // translate to pixel coords
+      const positions = new Map();
+      let minX = Infinity, maxX = -Infinity, maxDepth = 0;
+
+      function collect(n){
+        maxDepth = Math.max(maxDepth, n.__depth);
+        minX = Math.min(minX, n.__xUnit);
+        maxX = Math.max(maxX, n.__xUnit);
+        positions.set(n.name, { xUnit:n.__xUnit, depth:n.__depth, node:n });
+        n.children.forEach(collect);
+      }
+      roots.forEach(collect);
+
+      const unitSpan = Math.max(1, (maxX - minX));
+      // 讓葉節點間距固定：NODE_W + H_GAP
+      const UNIT_W = NODE_W + H_GAP;
+
+      // root 多棵時，也會被排在同一張圖（左右展開）
+      for(const [name, p] of positions){
+        const x = PADDING + (p.xUnit - minX) * UNIT_W + NODE_W/2;
+        const y = PADDING + p.depth * V_GAP;
+        p.x = x;
+        p.y = y;
+      }
+
+      const stageW = Math.max(980, PADDING*2 + (unitSpan * UNIT_W) + NODE_W);
+      const stageH = Math.max(520, PADDING*2 + (maxDepth * V_GAP) + NODE_H + 60);
+
+      return { positions, stageW, stageH, NODE_W, NODE_H };
     }
 
-    // list UI（左側清單：保留上一代主管資訊，方便檢查資料）
+    // ===== UI: list =====
     function renderList(){
       peopleList.innerHTML = "";
       if(people.length === 0){
@@ -681,7 +717,7 @@
       }
     }
 
-    // chart UI（右側組織圖：只顯示姓名 + 職級）
+    // ===== chart render (absolute layout) =====
     function clearChart(){
       nodesEl.innerHTML = "";
       svgLines.innerHTML = "";
@@ -692,13 +728,14 @@
       pdfStamp.textContent = `匯出時間：${nowStamp()}`;
 
       if(people.length === 0){
-        const lvl = document.createElement("div");
-        lvl.className = "level";
-        const node = document.createElement("div");
-        node.className = "node";
-        node.innerHTML = `<p class="nm">尚未輸入資料</p><p class="tt">請在左側新增人員或匯入 Excel</p>`;
-        lvl.appendChild(node);
-        nodesEl.appendChild(lvl);
+        stage.style.width = "980px";
+        stage.style.height = "520px";
+        const el = document.createElement("div");
+        el.className = "node";
+        el.style.left = "50%";
+        el.style.top = "30px";
+        el.innerHTML = `<p class="nm">尚未輸入資料</p><p class="tt">請在左側新增人員或匯入 Excel</p>`;
+        nodesEl.appendChild(el);
         return;
       }
 
@@ -706,81 +743,67 @@
         showWarn("偵測到「姓名重複」。建議避免重複姓名，否則上一代主管比對可能錯誤。\n你仍可繼續產生，但結果可能不準。");
       }
 
-      const { roots, errors } = buildTree(people);
+      const { roots, errors, map } = buildTree(people);
       if(errors.length){
         showWarn(errors.join("\n"));
       }else{
         clearMsg();
       }
 
-      const levels = levelize(roots);
-      const nodeDomMap = new Map();
+      const layout = computeLayout(roots);
+      stage.style.width = layout.stageW + "px";
+      stage.style.height = layout.stageH + "px";
 
-      levels.forEach((nodes, depth) => {
-        const levelEl = document.createElement("div");
-        levelEl.className = "level";
-        levelEl.dataset.depth = depth;
+      // render nodes
+      for(const [name, p] of layout.positions){
+        const n = p.node;
+        const el = document.createElement("div");
+        el.className = "node";
+        el.dataset.name = n.name;
+        el.style.left = p.x + "px";
+        el.style.top  = p.y + "px";
+        el.innerHTML = `
+          <p class="nm">${escapeHtml(n.name)}</p>
+          <p class="tt">${escapeHtml(n.title || "（未填職級）")}</p>
+        `;
+        nodesEl.appendChild(el);
+      }
 
-        for(const n of nodes){
-          const el = document.createElement("div");
-          el.className = "node";
-          el.dataset.name = n.name;
-
-          el.innerHTML = `
-            <p class="nm">${escapeHtml(n.name)}</p>
-            <p class="tt">${escapeHtml(n.title || "（未填職級）")}</p>
-          `;
-
-          levelEl.appendChild(el);
-          nodeDomMap.set(n.name, el);
-        }
-
-        nodesEl.appendChild(levelEl);
-      });
-
-      // ✅ 等 DOM 排版完成再畫線
-      requestAnimationFrame(() => drawLines(nodeDomMap));
+      // render lines
+      drawLinesAbsolute(layout, map);
     }
 
-    // ✅ 修正版：線條繪製（不會莫名清空 / 不會中斷）
-    function drawLines(nodeDomMap){
+    function drawLinesAbsolute(layout, map){
       svgLines.innerHTML = "";
+      svgLines.setAttribute("width", layout.stageW);
+      svgLines.setAttribute("height", layout.stageH);
+      svgLines.setAttribute("viewBox", `0 0 ${layout.stageW} ${layout.stageH}`);
 
-      const stage = document.getElementById("stage");
-      const rect = stage.getBoundingClientRect();
-
-      // 讓 SVG 覆蓋整個 stage（包含可捲動區域）
-      svgLines.setAttribute("width", stage.scrollWidth);
-      svgLines.setAttribute("height", stage.scrollHeight);
-      svgLines.setAttribute("viewBox", `0 0 ${stage.scrollWidth} ${stage.scrollHeight}`);
-
-      function centerTop(el){
-        const r = el.getBoundingClientRect();
-        const x = (r.left - rect.left) + (r.width/2) + stage.scrollLeft;
-        const y = (r.top - rect.top) + stage.scrollTop;
-        return {x,y};
-      }
-      function centerBottom(el){
-        const r = el.getBoundingClientRect();
-        const x = (r.left - rect.left) + (r.width/2) + stage.scrollLeft;
-        const y = (r.top - rect.top) + r.height + stage.scrollTop;
-        return {x,y};
-      }
+      const NODE_W = layout.NODE_W;
+      const NODE_H = layout.NODE_H;
 
       for(const p of people){
-        const child = nodeDomMap.get(normalize(p.name));
-        const parent = nodeDomMap.get(normalize(p.manager));
-        if(!child || !parent) continue; // 沒有上一代主管就不畫線
+        const childName = normalize(p.name);
+        const parentName = normalize(p.manager);
+        if(!parentName) continue;
 
-        const a = centerBottom(parent);
-        const b = centerTop(child);
-        const midY = (a.y + b.y) / 2;
+        const childPos = layout.positions.get(childName);
+        const parentPos = layout.positions.get(parentName);
+        if(!childPos || !parentPos) continue;
+
+        // 從 parent 底部中心 → child 頂部中心
+        const ax = parentPos.x;
+        const ay = parentPos.y + NODE_H;
+        const bx = childPos.x;
+        const by = childPos.y;
+
+        const midY = (ay + by) / 2;
 
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        const d = `M ${a.x} ${a.y}
-                   C ${a.x} ${midY},
-                     ${b.x} ${midY},
-                     ${b.x} ${b.y}`;
+        const d = `M ${ax} ${ay}
+                   C ${ax} ${midY},
+                     ${bx} ${midY},
+                     ${bx} ${by}`;
         path.setAttribute("d", d);
         path.setAttribute("fill", "none");
         path.setAttribute("stroke", "#cbd5e1");
@@ -789,7 +812,7 @@
       }
     }
 
-    // actions
+    // ===== actions =====
     btnAdd.addEventListener("click", () => {
       clearMsg();
       const name = normalize(inpName.value);
@@ -801,7 +824,6 @@
         return;
       }
 
-      // 同名覆蓋更新
       const idx = people.findIndex(x => normalize(x.name) === name);
       const item = { name, title, manager };
       if(idx >= 0){
@@ -864,17 +886,13 @@
     btnLoadDemo.addEventListener("click", () => {
       clearMsg();
       people = [
-        { name:"陳經理", title:"業務經理", manager:"" },
-        { name:"王襄理", title:"業務襄理", manager:"陳經理" },
-        { name:"林襄理", title:"業務襄理", manager:"陳經理" },
-        { name:"張主任", title:"主任", manager:"王襄理" },
-        { name:"李主任", title:"主任", manager:"王襄理" },
-        { name:"周主任", title:"主任", manager:"林襄理" },
-        { name:"黃業代", title:"業務代表", manager:"張主任" },
-        { name:"吳業代", title:"業務代表", manager:"李主任" },
-        { name:"趙業代", title:"業務代表", manager:"周主任" },
+        { name:"A主管", title:"業務經理", manager:"" },
+        { name:"B主管", title:"業務襄理", manager:"A主管" },
+        { name:"C主管", title:"主任", manager:"B主管" },
+        { name:"D主管", title:"主任", manager:"B主管" },
+        { name:"E業代", title:"業務代表", manager:"C主管" },
       ];
-      showOk("已載入示範資料。");
+      showOk("已載入示範資料（A→B→C 會垂直對齊）。");
       renderAll();
     });
 
@@ -941,8 +959,6 @@
 
       try {
         showOk("正在產生橫式 PDF…");
-
-        // 讓線條有時間畫出來
         await new Promise(r => setTimeout(r, 200));
 
         const canvas = await html2canvas(pdfArea, {
@@ -954,7 +970,6 @@
         const imgData = canvas.toDataURL("image/png");
         const { jsPDF } = window.jspdf;
 
-        // A4 橫式：297 x 210 mm
         const pdf = new jsPDF({ orientation: "l", unit: "mm", format: "a4" });
 
         const pageW = 297;
@@ -989,40 +1004,13 @@
       jsonArea.value = JSON.stringify(people, null, 2);
     }
 
-    // 視窗大小變動：重畫（避免線跑位）
-    window.addEventListener("resize", () => {
-      if(nodesEl.children.length) renderChart();
-    });
-
-    // 右側捲動也要重畫線（因為我們用 getBoundingClientRect + scroll 位置算）
-    document.querySelector(".canvas").addEventListener("scroll", () => {
-      // 避免過度頻繁：用 requestAnimationFrame 合併
-      if(window.__rafLineRedraw) return;
-      window.__rafLineRedraw = requestAnimationFrame(() => {
-        window.__rafLineRedraw = null;
-        // 只在有節點時才重畫
-        if(nodesEl.children.length){
-          // 直接重畫線就好，不用全部重建
-          // 但為了簡單穩定，這裡用 renderChart 也可；我改成只重畫線更順
-          // 重新取得 map（用 DOM dataset）
-          const nodeDomMap = new Map();
-          document.querySelectorAll(".node[data-name]").forEach(el => nodeDomMap.set(el.dataset.name, el));
-          drawLines(nodeDomMap);
-        }
-      });
-    });
-
-    // 初始示範資料（你要空白也可以：people = [];）
+    // 初始示範資料（A→B→C 會在同一垂直線）
     people = [
-      { name:"陳經理", title:"業務經理", manager:"" },
-      { name:"王襄理", title:"業務襄理", manager:"陳經理" },
-      { name:"林襄理", title:"業務襄理", manager:"陳經理" },
-      { name:"張主任", title:"主任", manager:"王襄理" },
-      { name:"李主任", title:"主任", manager:"王襄理" },
-      { name:"周主任", title:"主任", manager:"林襄理" },
-      { name:"黃業代", title:"業務代表", manager:"張主任" },
-      { name:"吳業代", title:"業務代表", manager:"李主任" },
-      { name:"趙業代", title:"業務代表", manager:"周主任" },
+      { name:"A主管", title:"業務經理", manager:"" },
+      { name:"B主管", title:"業務襄理", manager:"A主管" },
+      { name:"C主管", title:"主任", manager:"B主管" },
+      { name:"D主管", title:"主任", manager:"B主管" },
+      { name:"E業代", title:"業務代表", manager:"C主管" }
     ];
     renderAll();
   </script>
