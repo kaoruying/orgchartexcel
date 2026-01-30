@@ -308,7 +308,7 @@
       white-space:nowrap;
     }
 
-    /* ✅ 樹狀版面：座標定位 */
+    /* 樹狀版面：座標定位 */
     .stage{
       position:relative;
       min-width: 980px;
@@ -337,7 +337,7 @@
       box-shadow: 0 8px 18px rgba(17,24,39,.06);
       text-align:center;
       position:absolute;
-      transform: translate(-50%, 0); /* 以中心點定位 X */
+      transform: translate(-50%, 0);
     }
     .node .nm{
       font-weight:900;
@@ -355,8 +355,8 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <!-- 截圖：html2canvas -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <!-- PDF：jsPDF -->
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jsPDF.umd.min.js"></script>
+  <!-- ✅ PDF：jsPDF（修正：檔名需全小寫 jspdf.umd.min.js） -->
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 </head>
 
 <body>
@@ -461,9 +461,6 @@
   </main>
 
   <script>
-    /**************************************************
-     * people = [{ name: "姓名", title: "職級", manager: "上一代主管姓名(可空)" }]
-     **************************************************/
     let people = [];
 
     // DOM
@@ -600,7 +597,7 @@
       return { roots, errors };
     }
 
-    // ===== ✅ tidy tree layout (Buchheim) =====
+    // ===== tidy tree layout (Buchheim) =====
     function computeLayout(roots){
       const NODE_W = 220;
       const NODE_H = 74;
@@ -883,7 +880,7 @@
       stage.style.width = layout.stageW + "px";
       stage.style.height = layout.stageH + "px";
 
-      // nodes（只顯示姓名+職級）
+      // nodes（只顯示姓名 + 職級）
       for(const [name, p] of layout.positions){
         const n = p.node;
         const el = document.createElement("div");
@@ -898,7 +895,6 @@
         nodesEl.appendChild(el);
       }
 
-      // lines（用 layout.positions 畫）
       drawLinesAbsolute(layout);
     }
 
@@ -947,7 +943,6 @@
         return;
       }
 
-      // 同名覆蓋更新
       const idx = people.findIndex(x => normalize(x.name) === name);
       const item = { name, title, manager };
       if(idx >= 0){
@@ -1009,15 +1004,14 @@
 
     btnLoadDemo.addEventListener("click", () => {
       clearMsg();
-      // 範例：確保「陳大三」在「王大二」正上方，而不會落到「王大一」正下方
       people = [
         { name:"陳大三", title:"業務主任", manager:"" },
         { name:"王大二", title:"專案SR", manager:"陳大三" },
         { name:"王大一", title:"業務主任", manager:"陳大三" },
-        { name:"李阿明", title:"業務主任", manager:"" },
-        { name:"陳大二", title:"業務襄理", manager:"李阿明" }
+        { name:"王小七", title:"業務代表", manager:"王大二" },
+        { name:"林小美", title:"業務代表", manager:"王大一" }
       ];
-      showOk("已載入示範資料（tidy tree 版面：上下線位置不會被誤認）。");
+      showOk("已載入示範資料。");
       renderAll();
     });
 
@@ -1074,9 +1068,15 @@
       }
     });
 
-    // PDF export (A4 landscape, single page)
+    // ✅ PDF export（加入 jsPDF 載入檢查，避免 window.jspdf undefined）
     btnPdf.addEventListener("click", async () => {
       clearMsg();
+
+      if (!window.jspdf || !window.jspdf.jsPDF) {
+        showWarn("PDF 產生失敗：jsPDF 套件未載入成功。\n請確認你有網路，或 jsPDF 的 script 路徑正確。");
+        return;
+      }
+
       if (people.length === 0) {
         showWarn("目前沒有資料，無法下載 PDF。");
         return;
@@ -1095,7 +1095,6 @@
         const imgData = canvas.toDataURL("image/png");
         const { jsPDF } = window.jspdf;
 
-        // A4 橫式：297 x 210 mm
         const pdf = new jsPDF({ orientation: "l", unit: "mm", format: "a4" });
 
         const pageW = 297;
@@ -1130,13 +1129,13 @@
       jsonArea.value = JSON.stringify(people, null, 2);
     }
 
-    // 初始：載入一組示範資料
+    // 初始示範資料
     people = [
       { name:"陳大三", title:"業務主任", manager:"" },
       { name:"王大二", title:"專案SR", manager:"陳大三" },
       { name:"王大一", title:"業務主任", manager:"陳大三" },
       { name:"王小七", title:"業務代表", manager:"王大二" },
-      { name:"林小美", title:"業務代表", manager:"王大一" },
+      { name:"林小美", title:"業務代表", manager:"王大一" }
     ];
     renderAll();
   </script>
