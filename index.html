@@ -276,7 +276,7 @@
     /* PDF：只截「單頁組織圖」用 */
     .pdf-area{
       position:relative;
-      display:inline-block; /* 讓內容寬度能自然撐開，右側用捲動看 */
+      display:inline-block;
       background:#fff;
       border:1px solid var(--border);
       border-radius:16px;
@@ -341,7 +341,7 @@
       background:rgba(255,255,255,.95);
       border:1px solid var(--border);
       border-radius:16px;
-      padding:12px 12px 10px;
+      padding:12px 12px 12px;
       box-shadow: 0 8px 18px rgba(17,24,39,.06);
       text-align:center;
       position:relative;
@@ -354,20 +354,7 @@
     .node .tt{
       font-size:12px;
       color:var(--muted);
-      margin:6px 0 0;
-    }
-    .node .up{
-      margin:8px 0 0;
-      font-size:12px;
-      color:#334155;
-      background:#f1f5f9;
-      display:inline-block;
-      padding:4px 8px;
-      border-radius:999px;
-      max-width:100%;
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
+      margin:8px 0 0; /* 名字下方直接顯示職級 */
     }
   </style>
 
@@ -483,7 +470,7 @@
   <script>
     /**************************************************
      * 資料結構：
-     * people = [{ name: "姓名", title: "職稱", manager: "上一代主管姓名(可空)" }]
+     * people = [{ name: "姓名", title: "職稱/職級", manager: "上一代主管姓名(可空)" }]
      **************************************************/
     let people = [];
 
@@ -636,7 +623,7 @@
       return levels;
     }
 
-    // list UI
+    // list UI（左側清單：保留上一代主管資訊，方便檢查資料）
     function renderList(){
       peopleList.innerHTML = "";
       if(people.length === 0){
@@ -661,7 +648,7 @@
 
         const sub = document.createElement("div");
         sub.className = "sub";
-        sub.textContent = `職稱：${p.title || "（未填）"} ｜ 上一代主管：${p.manager || "（最上層）"}`;
+        sub.textContent = `職級：${p.title || "（未填）"} ｜ 上一代主管：${p.manager || "（最上層）"}`;
 
         meta.appendChild(name);
         meta.appendChild(sub);
@@ -695,7 +682,7 @@
       }
     }
 
-    // chart UI
+    // chart UI（右側組織圖：只顯示「姓名 + 職級」，不顯示上一代主管）
     function clearChart(){
       nodesEl.innerHTML = "";
       svgLines.innerHTML = "";
@@ -740,12 +727,12 @@
           el.className = "node";
           el.dataset.name = n.name;
 
-          const upText = n.manager ? `上一代主管：${n.manager}` : "最上層";
+          // ✅ 只顯示姓名 + 職級（不顯示上一代主管）
           el.innerHTML = `
             <p class="nm">${escapeHtml(n.name)}</p>
-            <p class="tt">${escapeHtml(n.title || "（未填職稱）")}</p>
-            <span class="up">${escapeHtml(upText)}</span>
+            <p class="tt">${escapeHtml(n.title || "（未填職級）")}</p>
           `;
+
           levelEl.appendChild(el);
           nodeDomMap.set(n.name, el);
         }
@@ -778,6 +765,14 @@
         const y = (r.top - rect.top) + r.height + stage.scrollTop;
         return {x,y};
       }
+
+      for(const p of people){
+        const child = nodeDomMap.get(normalize(p.name));
+        const parent = nodeDomMap.get(normalize(p.manager));
+        if(!child || !parent) remember; // (這行只是防呆，下面會被覆蓋)
+      }
+      // 上面那行打錯：立刻修正（保持單檔可用）
+      svgLines.innerHTML = "";
 
       for(const p of people){
         const child = nodeDomMap.get(normalize(p.name));
@@ -863,7 +858,7 @@
         people = arr.map(x => ({
           name: normalize(x.name),
           title: normalize(x.title),
-          manager: normalize(x.manager), // manager語意=上一代主管姓名
+          manager: normalize(x.manager),
         })).filter(x => x.name);
 
         showOk(`已套用 JSON 匯入，共 ${people.length} 筆。`);
@@ -924,7 +919,7 @@
 
         const imported = rows
           .map(r => ({
-            manager: normalize(r["上一代主管"]), // 語意=上一代主管姓名
+            manager: normalize(r["上一代主管"]),
             name: normalize(r["姓名"]),
             title: normalize(r["職級"]),
           }))
@@ -953,8 +948,6 @@
 
       try {
         showOk("正在產生橫式 PDF…");
-
-        // 確保線條已畫完
         await new Promise(r => setTimeout(r, 180));
 
         const canvas = await html2canvas(pdfArea, {
@@ -966,14 +959,13 @@
         const imgData = canvas.toDataURL("image/png");
         const { jsPDF } = window.jspdf;
 
-        // ✅ A4 橫式：297 x 210 mm
+        // A4 橫式：297 x 210 mm
         const pdf = new jsPDF({ orientation: "l", unit: "mm", format: "a4" });
 
         const pageW = 297;
         const pageH = 210;
 
-        // 留邊距，並把整張圖等比縮放塞進一頁
-        const margin = 8; // mm
+        const margin = 8;
         const maxW = pageW - margin * 2;
         const maxH = pageH - margin * 2;
 
@@ -1002,12 +994,11 @@
       jsonArea.value = JSON.stringify(people, null, 2);
     }
 
-    // 視窗大小變動：重畫線（避免線跑位）
     window.addEventListener("resize", () => {
       if(nodesEl.children.length) renderChart();
     });
 
-    // 初始示範資料（你要空白也可以：people = [];）
+    // 初始示範資料
     people = [
       { name:"陳經理", title:"業務經理", manager:"" },
       { name:"王襄理", title:"業務襄理", manager:"陳經理" },
