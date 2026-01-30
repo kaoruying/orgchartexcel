@@ -391,7 +391,7 @@
             <input id="inpName" placeholder="例如：王小明" />
           </div>
           <div>
-            <label>職稱</label>
+            <label>職稱 / 職級</label>
             <input id="inpTitle" placeholder="例如：業務襄理" />
           </div>
           <div class="full">
@@ -427,7 +427,7 @@
 
         <details>
           <summary>進階：批次匯入 / 匯出（貼上資料陣列 JSON）</summary>
-          <p class="small-note">格式：<code>[{"name":"姓名","title":"職稱","manager":"上一代主管姓名"}...]</code></p>
+          <p class="small-note">格式：<code>[{"name":"姓名","title":"職級","manager":"上一代主管姓名"}...]</code></p>
           <label style="margin-top:10px;">資料陣列（JSON）</label>
           <textarea id="jsonArea"></textarea>
           <div class="btns">
@@ -469,7 +469,6 @@
 
   <script>
     /**************************************************
-     * 資料結構：
      * people = [{ name: "姓名", title: "職稱/職級", manager: "上一代主管姓名(可空)" }]
      **************************************************/
     let people = [];
@@ -682,7 +681,7 @@
       }
     }
 
-    // chart UI（右側組織圖：只顯示「姓名 + 職級」，不顯示上一代主管）
+    // chart UI（右側組織圖：只顯示姓名 + 職級）
     function clearChart(){
       nodesEl.innerHTML = "";
       svgLines.innerHTML = "";
@@ -727,7 +726,6 @@
           el.className = "node";
           el.dataset.name = n.name;
 
-          // ✅ 只顯示姓名 + 職級（不顯示上一代主管）
           el.innerHTML = `
             <p class="nm">${escapeHtml(n.name)}</p>
             <p class="tt">${escapeHtml(n.title || "（未填職級）")}</p>
@@ -740,15 +738,18 @@
         nodesEl.appendChild(levelEl);
       });
 
+      // ✅ 等 DOM 排版完成再畫線
       requestAnimationFrame(() => drawLines(nodeDomMap));
     }
 
+    // ✅ 修正版：線條繪製（不會莫名清空 / 不會中斷）
     function drawLines(nodeDomMap){
       svgLines.innerHTML = "";
 
       const stage = document.getElementById("stage");
       const rect = stage.getBoundingClientRect();
 
+      // 讓 SVG 覆蓋整個 stage（包含可捲動區域）
       svgLines.setAttribute("width", stage.scrollWidth);
       svgLines.setAttribute("height", stage.scrollHeight);
       svgLines.setAttribute("viewBox", `0 0 ${stage.scrollWidth} ${stage.scrollHeight}`);
@@ -769,15 +770,7 @@
       for(const p of people){
         const child = nodeDomMap.get(normalize(p.name));
         const parent = nodeDomMap.get(normalize(p.manager));
-        if(!child || !parent) remember; // (這行只是防呆，下面會被覆蓋)
-      }
-      // 上面那行打錯：立刻修正（保持單檔可用）
-      svgLines.innerHTML = "";
-
-      for(const p of people){
-        const child = nodeDomMap.get(normalize(p.name));
-        const parent = nodeDomMap.get(normalize(p.manager));
-        if(!child || !parent) continue;
+        if(!child || !parent) continue; // 沒有上一代主管就不畫線
 
         const a = centerBottom(parent);
         const b = centerTop(child);
@@ -948,7 +941,9 @@
 
       try {
         showOk("正在產生橫式 PDF…");
-        await new Promise(r => setTimeout(r, 180));
+
+        // 讓線條有時間畫出來
+        await new Promise(r => setTimeout(r, 200));
 
         const canvas = await html2canvas(pdfArea, {
           backgroundColor: "#ffffff",
@@ -994,11 +989,30 @@
       jsonArea.value = JSON.stringify(people, null, 2);
     }
 
+    // 視窗大小變動：重畫（避免線跑位）
     window.addEventListener("resize", () => {
       if(nodesEl.children.length) renderChart();
     });
 
-    // 初始示範資料
+    // 右側捲動也要重畫線（因為我們用 getBoundingClientRect + scroll 位置算）
+    document.querySelector(".canvas").addEventListener("scroll", () => {
+      // 避免過度頻繁：用 requestAnimationFrame 合併
+      if(window.__rafLineRedraw) return;
+      window.__rafLineRedraw = requestAnimationFrame(() => {
+        window.__rafLineRedraw = null;
+        // 只在有節點時才重畫
+        if(nodesEl.children.length){
+          // 直接重畫線就好，不用全部重建
+          // 但為了簡單穩定，這裡用 renderChart 也可；我改成只重畫線更順
+          // 重新取得 map（用 DOM dataset）
+          const nodeDomMap = new Map();
+          document.querySelectorAll(".node[data-name]").forEach(el => nodeDomMap.set(el.dataset.name, el));
+          drawLines(nodeDomMap);
+        }
+      });
+    });
+
+    // 初始示範資料（你要空白也可以：people = [];）
     people = [
       { name:"陳經理", title:"業務經理", manager:"" },
       { name:"王襄理", title:"業務襄理", manager:"陳經理" },
