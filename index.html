@@ -308,7 +308,7 @@
       white-space:nowrap;
     }
 
-    /* ✅ 改成「座標定位」的樹狀版面 */
+    /* ✅ 樹狀版面：座標定位 */
     .stage{
       position:relative;
       min-width: 980px;
@@ -336,8 +336,8 @@
       padding:12px 12px 12px;
       box-shadow: 0 8px 18px rgba(17,24,39,.06);
       text-align:center;
-      position:absolute; /* ✅ absolute */
-      transform: translate(-50%, 0); /* ✅ 以中心點定位 X */
+      position:absolute;
+      transform: translate(-50%, 0); /* 以中心點定位 X */
     }
     .node .nm{
       font-weight:900;
@@ -356,7 +356,7 @@
   <!-- 截圖：html2canvas -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <!-- PDF：jsPDF -->
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jsPDF.umd.min.js"></script>
 </head>
 
 <body>
@@ -461,6 +461,9 @@
   </main>
 
   <script>
+    /**************************************************
+     * people = [{ name: "姓名", title: "職級", manager: "上一代主管姓名(可空)" }]
+     **************************************************/
     let people = [];
 
     // DOM
@@ -493,7 +496,7 @@
     const pdfStamp = document.getElementById("pdfStamp");
     const stage = document.getElementById("stage");
 
-    // ===== helpers =====
+    // helpers
     function showWarn(text){
       msgWarn.style.display = "block";
       msgWarn.textContent = text || "";
@@ -537,7 +540,7 @@
       return false;
     }
 
-    // ===== build tree + validate =====
+    // ===== tree build + validate =====
     function buildTree(data){
       const map = new Map();
       const errors = [];
@@ -562,7 +565,7 @@
         }
       }
 
-      // cycle detect (walk up)
+      // cycle detect
       const visiting = new Set();
       const visited = new Set();
       function dfsCycle(n){
@@ -588,77 +591,203 @@
         errors.push("找不到最上層（所有人都有上一代主管，或上一代主管不存在）。");
       }
 
-      return { roots, errors, map };
+      // stable sort children
+      for(const node of map.values()){
+        node.children.sort((a,b) => a.name.localeCompare(b.name, "zh-Hant"));
+      }
+      roots.sort((a,b) => a.name.localeCompare(b.name, "zh-Hant"));
+
+      return { roots, errors };
     }
 
-    // ===== ✅ layout: leaf x assign, parent x = avg(children) =====
+    // ===== ✅ tidy tree layout (Buchheim) =====
     function computeLayout(roots){
       const NODE_W = 220;
-      const NODE_H = 74;     // 估算節點高度（名字+職級）
+      const NODE_H = 74;
       const H_GAP  = 60;
-      const V_GAP  = 90;
+      const V_GAP  = 110;
       const PADDING = 30;
 
-      let leafIndex = 0;
-
-      // 先排序 children（可讓圖更穩定）
-      function sortTree(n){
-        n.children.sort((a,b) => a.name.localeCompare(b.name, "zh-Hant"));
-        n.children.forEach(sortTree);
-      }
-      roots.forEach(sortTree);
-
-      // dfs: assign x unit (leaf index)
-      function assignX(n){
-        if(!n.children || n.children.length === 0){
-          n.__xUnit = leafIndex++;
-          return n.__xUnit;
+      function wrap(node, parent=null, depth=0, number=1){
+        const w = {
+          node, parent,
+          children: [],
+          depth, number,
+          x:0, y:0,
+          prelim:0, mod:0,
+          change:0, shift:0,
+          ancestor:null, thread:null
+        };
+        w.ancestor = w;
+        if(node.children && node.children.length){
+          node.children.forEach((c,i) => w.children.push(wrap(c, w, depth+1, i+1)));
         }
-        const xs = n.children.map(assignX);
-        n.__xUnit = xs.reduce((s,v)=>s+v,0) / xs.length; // ✅ 單子節點 = 同 X
-        return n.__xUnit;
+        return w;
       }
-      roots.forEach(assignX);
 
-      // assign y by depth
-      function assignY(n, depth){
-        n.__depth = depth;
-        n.children.forEach(c => assignY(c, depth+1));
+      function leftSibling(v){
+        if(!v.parent) return null;
+        const i = v.number - 2;
+        return i >= 0 ? v.parent.children[i] : null;
       }
-      roots.forEach(r => assignY(r, 0));
+      function leftMostSibling(v){
+        if(!v.parent) return null;
+        return v.parent.children[0] === v ? null : v.parent.children[0];
+      }
+      function nextLeft(v){
+        return v.children.length ? v.children[0] : v.thread;
+      }
+      function nextRight(v){
+        return v.children.length ? v.children[v.children.length-1] : v.thread;
+      }
 
-      // translate to pixel coords
+      function moveSubtree(wl, wr, shift){
+        const subtrees = wr.number - wl.number;
+        wr.change -= shift / subtrees;
+        wr.shift += shift;
+        wl.change += shift / subtrees;
+        wr.prelim += shift;
+        wr.mod += shift;
+      }
+
+      function executeShifts(v){
+        let shift = 0;
+        let change = 0;
+        for(let i=v.children.length-1;i>=0;i--){
+          const w = v.children[i];
+          w.prelim += shift;
+          w.mod += shift;
+          change += w.change;
+          shift += w.shift + change;
+        }
+      }
+
+      function ancestor(vil, v, defaultAncestor){
+        if(vil.ancestor.parent === v.parent) return vil.ancestor;
+        return defaultAncestor;
+      }
+
+      function apportion(v, defaultAncestor, distance){
+        const w = leftSibling(v);
+        if(!w) return defaultAncestor;
+
+        let vir = v;
+        let vor = v;
+        let vil = w;
+        let vol = leftMostSibling(v);
+
+        let sir = vir.mod;
+        let sor = vor.mod;
+        let sil = vil.mod;
+        let sol = vol.mod;
+
+        while(nextRight(vil) && nextLeft(vir)){
+          vil = nextRight(vil);
+          vir = nextLeft(vir);
+          vol = nextLeft(vol);
+          vor = nextRight(vor);
+
+          vor.ancestor = v;
+
+          const shift = (vil.prelim + sil) - (vir.prelim + sir) + distance;
+          if(shift > 0){
+            const a = ancestor(vil, v, defaultAncestor);
+            moveSubtree(a, v, shift);
+            sir += shift;
+            sor += shift;
+          }
+
+          sil += vil.mod;
+          sir += vir.mod;
+          sol += vol.mod;
+          sor += vor.mod;
+        }
+
+        if(nextRight(vil) && !nextRight(vor)){
+          vor.thread = nextRight(vil);
+          vor.mod += sil - sor;
+        }
+        if(nextLeft(vir) && !nextLeft(vol)){
+          vol.thread = nextLeft(vir);
+          vol.mod += sir - sol;
+          defaultAncestor = v;
+        }
+
+        return defaultAncestor;
+      }
+
+      function firstWalk(v, distance){
+        if(v.children.length === 0){
+          const ls = leftSibling(v);
+          v.prelim = ls ? ls.prelim + distance : 0;
+        }else{
+          let defaultAncestor = v.children[0];
+          for(const w of v.children){
+            firstWalk(w, distance);
+            defaultAncestor = apportion(w, defaultAncestor, distance);
+          }
+          executeShifts(v);
+          const midpoint = (v.children[0].prelim + v.children[v.children.length-1].prelim) / 2;
+          const ls = leftSibling(v);
+          if(ls){
+            v.prelim = ls.prelim + distance;
+            v.mod = v.prelim - midpoint;
+          }else{
+            v.prelim = midpoint;
+          }
+        }
+        return v;
+      }
+
+      function secondWalk(v, m=0){
+        v.x = v.prelim + m;
+        v.y = v.depth;
+        for(const w of v.children){
+          secondWalk(w, m + v.mod);
+        }
+      }
+
+      // 多 root：包假根
+      const fakeRoot = { name:"__ROOT__", title:"", manager:"", children: roots };
+      const wrapped = wrap(fakeRoot);
+
+      const distance = 1;
+      firstWalk(wrapped, distance);
+      secondWalk(wrapped, 0);
+
       const positions = new Map();
       let minX = Infinity, maxX = -Infinity, maxDepth = 0;
 
-      function collect(n){
-        maxDepth = Math.max(maxDepth, n.__depth);
-        minX = Math.min(minX, n.__xUnit);
-        maxX = Math.max(maxX, n.__xUnit);
-        positions.set(n.name, { xUnit:n.__xUnit, depth:n.__depth, node:n });
-        n.children.forEach(collect);
+      function collect(v){
+        if(v.node.name !== "__ROOT__"){
+          minX = Math.min(minX, v.x);
+          maxX = Math.max(maxX, v.x);
+          maxDepth = Math.max(maxDepth, v.y);
+        }
+        for(const c of v.children) collect(c);
       }
-      roots.forEach(collect);
+      collect(wrapped);
 
-      const unitSpan = Math.max(1, (maxX - minX));
-      // 讓葉節點間距固定：NODE_W + H_GAP
       const UNIT_W = NODE_W + H_GAP;
+      const UNIT_H = V_GAP;
 
-      // root 多棵時，也會被排在同一張圖（左右展開）
-      for(const [name, p] of positions){
-        const x = PADDING + (p.xUnit - minX) * UNIT_W + NODE_W/2;
-        const y = PADDING + p.depth * V_GAP;
-        p.x = x;
-        p.y = y;
+      function fill(v){
+        if(v.node.name !== "__ROOT__"){
+          const px = PADDING + (v.x - minX) * UNIT_W + NODE_W/2;
+          const py = PADDING + (v.y) * UNIT_H;
+          positions.set(v.node.name, { x:px, y:py, node:v.node });
+        }
+        for(const c of v.children) fill(c);
       }
+      fill(wrapped);
 
-      const stageW = Math.max(980, PADDING*2 + (unitSpan * UNIT_W) + NODE_W);
-      const stageH = Math.max(520, PADDING*2 + (maxDepth * V_GAP) + NODE_H + 60);
+      const stageW = Math.max(980, PADDING*2 + (maxX - minX) * UNIT_W + NODE_W);
+      const stageH = Math.max(520, PADDING*2 + (maxDepth) * UNIT_H + NODE_H + 60);
 
       return { positions, stageW, stageH, NODE_W, NODE_H };
     }
 
-    // ===== UI: list =====
+    // ===== list UI =====
     function renderList(){
       peopleList.innerHTML = "";
       if(people.length === 0){
@@ -717,7 +846,7 @@
       }
     }
 
-    // ===== chart render (absolute layout) =====
+    // ===== chart render =====
     function clearChart(){
       nodesEl.innerHTML = "";
       svgLines.innerHTML = "";
@@ -743,7 +872,7 @@
         showWarn("偵測到「姓名重複」。建議避免重複姓名，否則上一代主管比對可能錯誤。\n你仍可繼續產生，但結果可能不準。");
       }
 
-      const { roots, errors, map } = buildTree(people);
+      const { roots, errors } = buildTree(people);
       if(errors.length){
         showWarn(errors.join("\n"));
       }else{
@@ -754,7 +883,7 @@
       stage.style.width = layout.stageW + "px";
       stage.style.height = layout.stageH + "px";
 
-      // render nodes
+      // nodes（只顯示姓名+職級）
       for(const [name, p] of layout.positions){
         const n = p.node;
         const el = document.createElement("div");
@@ -769,17 +898,16 @@
         nodesEl.appendChild(el);
       }
 
-      // render lines
-      drawLinesAbsolute(layout, map);
+      // lines（用 layout.positions 畫）
+      drawLinesAbsolute(layout);
     }
 
-    function drawLinesAbsolute(layout, map){
+    function drawLinesAbsolute(layout){
       svgLines.innerHTML = "";
       svgLines.setAttribute("width", layout.stageW);
       svgLines.setAttribute("height", layout.stageH);
       svgLines.setAttribute("viewBox", `0 0 ${layout.stageW} ${layout.stageH}`);
 
-      const NODE_W = layout.NODE_W;
       const NODE_H = layout.NODE_H;
 
       for(const p of people){
@@ -791,7 +919,6 @@
         const parentPos = layout.positions.get(parentName);
         if(!childPos || !parentPos) continue;
 
-        // 從 parent 底部中心 → child 頂部中心
         const ax = parentPos.x;
         const ay = parentPos.y + NODE_H;
         const bx = childPos.x;
@@ -800,11 +927,7 @@
         const midY = (ay + by) / 2;
 
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        const d = `M ${ax} ${ay}
-                   C ${ax} ${midY},
-                     ${bx} ${midY},
-                     ${bx} ${by}`;
-        path.setAttribute("d", d);
+        path.setAttribute("d", `M ${ax} ${ay} C ${ax} ${midY}, ${bx} ${midY}, ${bx} ${by}`);
         path.setAttribute("fill", "none");
         path.setAttribute("stroke", "#cbd5e1");
         path.setAttribute("stroke-width", "2");
@@ -824,6 +947,7 @@
         return;
       }
 
+      // 同名覆蓋更新
       const idx = people.findIndex(x => normalize(x.name) === name);
       const item = { name, title, manager };
       if(idx >= 0){
@@ -885,14 +1009,15 @@
 
     btnLoadDemo.addEventListener("click", () => {
       clearMsg();
+      // 範例：確保「陳大三」在「王大二」正上方，而不會落到「王大一」正下方
       people = [
-        { name:"A主管", title:"業務經理", manager:"" },
-        { name:"B主管", title:"業務襄理", manager:"A主管" },
-        { name:"C主管", title:"主任", manager:"B主管" },
-        { name:"D主管", title:"主任", manager:"B主管" },
-        { name:"E業代", title:"業務代表", manager:"C主管" },
+        { name:"陳大三", title:"業務主任", manager:"" },
+        { name:"王大二", title:"專案SR", manager:"陳大三" },
+        { name:"王大一", title:"業務主任", manager:"陳大三" },
+        { name:"李阿明", title:"業務主任", manager:"" },
+        { name:"陳大二", title:"業務襄理", manager:"李阿明" }
       ];
-      showOk("已載入示範資料（A→B→C 會垂直對齊）。");
+      showOk("已載入示範資料（tidy tree 版面：上下線位置不會被誤認）。");
       renderAll();
     });
 
@@ -949,7 +1074,7 @@
       }
     });
 
-    // PDF export (A4 landscape, single page, fit whole chart)
+    // PDF export (A4 landscape, single page)
     btnPdf.addEventListener("click", async () => {
       clearMsg();
       if (people.length === 0) {
@@ -970,6 +1095,7 @@
         const imgData = canvas.toDataURL("image/png");
         const { jsPDF } = window.jspdf;
 
+        // A4 橫式：297 x 210 mm
         const pdf = new jsPDF({ orientation: "l", unit: "mm", format: "a4" });
 
         const pageW = 297;
@@ -1004,13 +1130,13 @@
       jsonArea.value = JSON.stringify(people, null, 2);
     }
 
-    // 初始示範資料（A→B→C 會在同一垂直線）
+    // 初始：載入一組示範資料
     people = [
-      { name:"A主管", title:"業務經理", manager:"" },
-      { name:"B主管", title:"業務襄理", manager:"A主管" },
-      { name:"C主管", title:"主任", manager:"B主管" },
-      { name:"D主管", title:"主任", manager:"B主管" },
-      { name:"E業代", title:"業務代表", manager:"C主管" }
+      { name:"陳大三", title:"業務主任", manager:"" },
+      { name:"王大二", title:"專案SR", manager:"陳大三" },
+      { name:"王大一", title:"業務主任", manager:"陳大三" },
+      { name:"王小七", title:"業務代表", manager:"王大二" },
+      { name:"林小美", title:"業務代表", manager:"王大一" },
     ];
     renderAll();
   </script>
